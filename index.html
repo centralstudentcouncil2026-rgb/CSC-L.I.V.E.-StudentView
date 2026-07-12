@@ -296,7 +296,7 @@
     </style>
 </head>
 
-<body class="bg-slate-50 text-slate-900 min-h-screen">
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="dashboard-header bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 border-b border-yellow-700 shadow-md sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
@@ -340,7 +340,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+    <main class="w-full max-w-7xl mx-auto flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <!-- Tab Navigation -->
         <div class="dashboard-tabs grid w-full grid-cols-2 mb-4 bg-white p-1.5 shadow-sm rounded-2xl border border-slate-200">
             <button
@@ -600,7 +600,7 @@
     </div>
 
     <!-- Footer -->
-    <footer class="student-footer bg-slate-900 text-slate-400 mt-20 py-12 border-t border-slate-800">
+    <footer class="student-footer bg-slate-900 text-slate-400 mt-0 py-12 border-t border-slate-800">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="student-footer-content flex flex-col md:flex-row justify-between items-center gap-6">
                 <div class="student-footer-brand flex items-center space-x-3">
@@ -653,6 +653,7 @@
 
             const TEAMS_TABLE = "sports_leaderboard";
             const PARTICIPANTS_TABLE = "participants";
+            const ATTENDANCE_TABLE = "attendance";
             const MATCHES_TABLE = "scheduled_matches";
             const GAME_HISTORY_TABLE = "game_history";
             const SPORTS_TABLE = "sports";
@@ -700,7 +701,9 @@
             let matchReloadTimer = null;
             let leaderboardReloadTimer = null;
             let isLoadingMatches = false;
+            let shouldReloadMatchesAgain = false;
             let isLoadingLeaderboard = false;
+            let shouldReloadLeaderboardAgain = false;
             let lastLeaderboardRows = [];
             let lastLeaderboardHistoryRows = [];
             let lastLeaderboardSignature = "";
@@ -708,6 +711,8 @@
             let lastShownAnnouncementKey = null;
             let studentAnnouncementsData = [];
             let isRefreshingStudentAnnouncements = false;
+            let shouldRefreshStudentAnnouncementsAgain = false;
+            let shouldShowQueuedStudentAnnouncementPopup = false;
             const studentAnnouncementChanges = new Map();
             const STUDENT_SEEN_ANNOUNCEMENTS_KEY = "studentSeenAnnouncementIds";
 
@@ -914,9 +919,15 @@
             }
 
             async function refreshStudentAnnouncements({ showPopup = false } = {}) {
-                if (isRefreshingStudentAnnouncements) return;
+                if (isRefreshingStudentAnnouncements) {
+                    shouldRefreshStudentAnnouncementsAgain = true;
+                    shouldShowQueuedStudentAnnouncementPopup = shouldShowQueuedStudentAnnouncementPopup || Boolean(showPopup);
+                    return;
+                }
 
                 isRefreshingStudentAnnouncements = true;
+                shouldRefreshStudentAnnouncementsAgain = false;
+                shouldShowQueuedStudentAnnouncementPopup = false;
 
                 try {
                     await loadStudentAnnouncements();
@@ -927,6 +938,12 @@
                     }
                 } finally {
                     isRefreshingStudentAnnouncements = false;
+                    if (shouldRefreshStudentAnnouncementsAgain) {
+                        const showQueuedPopup = shouldShowQueuedStudentAnnouncementPopup;
+                        shouldRefreshStudentAnnouncementsAgain = false;
+                        shouldShowQueuedStudentAnnouncementPopup = false;
+                        await refreshStudentAnnouncements({ showPopup: showQueuedPopup });
+                    }
                 }
             }
 
@@ -1265,11 +1282,13 @@
 
             async function loadLeaderboard(options = {}) {
                 if (isLoadingLeaderboard) {
+                    shouldReloadLeaderboardAgain = true;
                     return;
                 }
 
                 const { showLoading = false } = options;
                 isLoadingLeaderboard = true;
+                shouldReloadLeaderboardAgain = false;
 
                 const shouldShowLoading = lastLeaderboardRows.length === 0;
 
@@ -1310,23 +1329,32 @@
                         return;
                     }
 
-                    const { data: historyRows, error: historyError } = await supabase
-                        .from(GAME_HISTORY_TABLE)
-                        .select("*");
+                    const [
+                        { data: historyRows, error: historyError },
+                        { data: attendanceRows, error: attendanceError }
+                    ] = await Promise.all([
+                        supabase
+                            .from(GAME_HISTORY_TABLE)
+                            .select("*"),
+
+                        supabase
+                            .from(ATTENDANCE_TABLE)
+                            .select("student_id, participant_id, team, status, attendance_date, checked_at")
+                    ]);
 
                     if (historyError) {
                         console.warn("Leaderboard game history warning:", historyError.message || historyError);
                     }
 
-                    const { data: sportsRows, error: sportsError } = await supabase
-                        .from(SPORTS_TABLE)
-                        .select("*");
-
-                    if (sportsError) {
-                        console.warn("Leaderboard sports points warning:", sportsError.message || sportsError);
+                    if (attendanceError) {
+                        console.warn("Leaderboard attendance bonus warning:", attendanceError.message || attendanceError);
                     }
 
-                    const leaderboardRows = buildLeaderboardRows(teams || [], historyError ? [] : (historyRows || []), sportsRows || []);
+                    const leaderboardRows = buildLeaderboardRows(
+                        teams || [],
+                        historyError ? [] : (historyRows || []),
+                        attendanceError ? [] : (attendanceRows || [])
+                    );
                     const leaderboardSignature = JSON.stringify(leaderboardRows);
                     lastLeaderboardRows = leaderboardRows;
                     lastLeaderboardHistoryRows = historyError ? [] : (historyRows || []);
@@ -1352,25 +1380,16 @@
                     }
                 } finally {
                     isLoadingLeaderboard = false;
+                    if (shouldReloadLeaderboardAgain) {
+                        shouldReloadLeaderboardAgain = false;
+                        await loadLeaderboard({ showLoading: false });
+                    }
                 }
             }
 
-            function buildLeaderboardRows(teams, historyRows, sportsRows) {
+            function buildLeaderboardRows(teams, historyRows, attendanceRows = []) {
                 const teamStats = new Map();
                 const registeredTeamAliases = new Map();
-                const sportsById = new Map();
-                const sportsByName = new Map();
-
-                (sportsRows || []).forEach(sport => {
-                    if (sport.id !== undefined && sport.id !== null) {
-                        sportsById.set(String(sport.id), sport);
-                    }
-
-                    const sportName = normalizeText(sport.sport_name || sport.name || sport.game_name);
-                    if (sportName) {
-                        sportsByName.set(sportName, sport);
-                    }
-                });
 
                 function makeTeamKey(teamId, teamName) {
                     if (teamId !== null && teamId !== undefined && teamId !== "") {
@@ -1388,9 +1407,9 @@
                         teamStats.set(key, {
                             id: teamId || baseValues.id || null,
                             team: safeTeamName,
-                            points: getFirstFiniteNumber(baseValues.points, baseValues.total_points, baseValues.score, 0),
-                            wins: getFirstFiniteNumber(baseValues.wins, baseValues.win, baseValues.total_wins, 0),
-                            losses: getFirstFiniteNumber(baseValues.losses, baseValues.loss, baseValues.total_losses, 0)
+                            points: 0,
+                            wins: 0,
+                            losses: 0
                         });
                     }
 
@@ -1462,7 +1481,7 @@
                     if (winnerId || winnerName) {
                         const winner = getRegisteredTeamStat(winnerId, winnerName);
                         if (winner) {
-                            winner.points += resolveHistoryPoints(history, "winner", sportsById, sportsByName);
+                            winner.points += resolveHistoryPoints(history, "winner");
                             winner.wins += 1;
                         }
                     }
@@ -1470,9 +1489,16 @@
                     if (loserId || loserName) {
                         const loser = getRegisteredTeamStat(loserId, loserName);
                         if (loser) {
-                            loser.points += resolveHistoryPoints(history, "loser", sportsById, sportsByName);
+                            loser.points += resolveHistoryPoints(history, "loser");
                             loser.losses += 1;
                         }
+                    }
+                });
+
+                buildAttendanceBonusRows(attendanceRows).forEach(bonus => {
+                    const team = getRegisteredTeamStat(null, bonus.team);
+                    if (team) {
+                        team.points += bonus.points;
                     }
                 });
 
@@ -1532,7 +1558,7 @@
                 };
             }
 
-            function resolveHistoryPoints(history, side, sportsById, sportsByName) {
+            function resolveHistoryPoints(history, side) {
                 const explicitWinnerPoints = findFiniteNumber(
                     history.winner_points_awarded,
                     history.winner_award,
@@ -1557,47 +1583,7 @@
                     return explicitLoserPoints.value;
                 }
 
-                const sport = findSportForHistory(history, sportsById, sportsByName);
-
-                if (sport) {
-                    if (side === "winner") {
-                        return getFirstFiniteNumber(
-                            sport.points_per_game,
-                            sport.winner_points,
-                            sport.default_winner_points,
-                            1
-                        );
-                    }
-
-                    return getFirstFiniteNumber(
-                        sport.loser_points,
-                        sport.default_loser_points,
-                        0
-                    );
-                }
-
-                return side === "winner" ? 1 : 0;
-            }
-
-            function findSportForHistory(history, sportsById, sportsByName) {
-                const sportId = getFirstValue(history.sport_id, history.game_id, history.category_id);
-
-                if (sportId !== null && sportsById.has(String(sportId))) {
-                    return sportsById.get(String(sportId));
-                }
-
-                const sportName = normalizeText(getFirstValue(
-                    history.sport_name,
-                    history.game_name,
-                    history.category_name,
-                    history.sport
-                ));
-
-                if (sportName && sportsByName.has(sportName)) {
-                    return sportsByName.get(sportName);
-                }
-
-                return null;
+                return 0;
             }
 
             function renderLeaderboardRows(leaderboardRows, historyRows) {
@@ -1689,6 +1675,60 @@
                 });
             }
 
+            function isPresentAttendanceStatus(status) {
+                return normalizeText(status || "Present") === "present";
+            }
+
+            function getAttendanceBonusDate(row) {
+                if (row.attendance_date) {
+                    return String(row.attendance_date).slice(0, 10);
+                }
+
+                if (row.checked_at) {
+                    return String(row.checked_at).slice(0, 10);
+                }
+
+                return "";
+            }
+
+            function buildAttendanceBonusRows(attendanceRows) {
+                const groups = new Map();
+
+                (attendanceRows || []).forEach(row => {
+                    const team = String(row.team || "").trim();
+                    const date = getAttendanceBonusDate(row);
+
+                    if (!team || !date || !isPresentAttendanceStatus(row.status)) {
+                        return;
+                    }
+
+                    const key = `${normalizeText(team)}|${date}`;
+                    if (!groups.has(key)) {
+                        groups.set(key, {
+                            team,
+                            date,
+                            students: new Set()
+                        });
+                    }
+
+                    const studentKey = String(row.student_id || row.participant_id || "").trim();
+                    if (!studentKey) {
+                        return;
+                    }
+
+                    groups.get(key).students.add(studentKey);
+                });
+
+                return [...groups.values()]
+                    .filter(group => group.students.size >= 100)
+                    .map(group => ({
+                        team: group.team,
+                        date: group.date,
+                        attendanceCount: group.students.size,
+                        points: 5
+                    }));
+            }
+
             function openTeamDetails(team, historyRows) {
                 const teamId = team.id;
                 const teamName = team.team;
@@ -1717,7 +1757,7 @@
                     return visibleHistory.map(game => {
                         const isWin = (game.winner_team_id && Number(game.winner_team_id) === Number(teamId)) || normalizeTeamName(game.winner_team_name) === selectedName;
                         const opponent = isWin ? game.loser_team_name : game.winner_team_name;
-                        const pts = isWin ? (game.winner_points_awarded || game.winner_award || game.winner_points || 0) : (game.loser_points_awarded || game.loser_award || game.loser_points || 0);
+                        const pts = resolveHistoryPoints(game, isWin ? "winner" : "loser");
 
                         return `
                             <div class="p-5 rounded-2xl border ${isWin ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'} relative overflow-hidden">
@@ -1798,10 +1838,14 @@
             }
 
             async function loadMatches(options = {}) {
-                if (isLoadingMatches) return;
+                if (isLoadingMatches) {
+                    shouldReloadMatchesAgain = true;
+                    return;
+                }
 
                 const { showLoading = false } = options;
                 isLoadingMatches = true;
+                shouldReloadMatchesAgain = false;
 
                 if (studentMatchesData.length === 0) {
                     studentMatchesGrid.innerHTML = `
@@ -1818,7 +1862,7 @@
                     .from(MATCHES_TABLE)
                     .select(`
                         id, sport_id, team_one_id, team_two_id, match_time, location, status, timer_enabled, timer_duration_seconds, timer_started_at, match_stage, game_period,
-                        sport:sports!scheduled_matches_sport_id_fkey(id, sport_name, winner_points, loser_points, points_per_game),
+                        sport:sports!scheduled_matches_sport_id_fkey(id, sport_name),
                         team_one:sports_leaderboard!scheduled_matches_team_one_fkey(team),
                         team_two:sports_leaderboard!scheduled_matches_team_two_fkey(team)
                     `)
@@ -1830,6 +1874,10 @@
                         studentMatchesGrid.innerHTML = `<div class="col-span-full p-10 text-center text-red-500 font-bold">Failed to load matches.</div>`;
                     }
                     isLoadingMatches = false;
+                    if (shouldReloadMatchesAgain) {
+                        shouldReloadMatchesAgain = false;
+                        await loadMatches({ showLoading: false });
+                    }
                     return;
                 }
 
@@ -1849,6 +1897,10 @@
                     lastMatchesSignature = matchesSignature;
                 }
                 isLoadingMatches = false;
+                if (shouldReloadMatchesAgain) {
+                    shouldReloadMatchesAgain = false;
+                    await loadMatches({ showLoading: false });
+                }
             }
 
             function renderMatches() {
@@ -2146,6 +2198,9 @@
                 })
                 .on("postgres_changes", { event: "*", schema: "public", table: PARTICIPANTS_TABLE }, async () => {
                     await loadStats();
+                })
+                .on("postgres_changes", { event: "*", schema: "public", table: ATTENDANCE_TABLE }, () => {
+                    scheduleLiveLeaderboardReload(150);
                 })
                 .on("postgres_changes", { event: "*", schema: "public", table: MATCHES_TABLE }, () => {
                     scheduleLiveMatchReload(0, { force: true });
