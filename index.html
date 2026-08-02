@@ -833,26 +833,14 @@
             }
 
             function getActiveScheduleDateFilter() {
-                return scheduleDateFilter?.value || "";
+                return scheduleDateFilter?.value || getLocalDateInputValue();
             }
 
             function getMatchDateValue(match) {
                 return getLocalDateInputValue(match?.match_time);
             }
 
-            function normalizeMatchStatus(status) {
-                const value = String(status || "").trim().toLowerCase();
-                if (["next", "upcoming", "scheduled", "pending"].includes(value)) return "Next";
-                if (["ongoing", "on going", "live", "in progress"].includes(value)) return "Ongoing";
-                if (["done", "completed", "complete", "finished"].includes(value)) return "Done";
-                return status || "Next";
-            }
-
             function formatDateFilterLabel(dateValue) {
-                if (!dateValue) {
-                    return activeScheduleFilter === "Next" ? "today and later" : "all dates";
-                }
-
                 const parsed = new Date(`${dateValue}T00:00:00`);
 
                 if (Number.isNaN(parsed.getTime())) {
@@ -1287,7 +1275,7 @@
             }
 
             function getLivePeriodLabel(match) {
-                if (normalizeMatchStatus(match.status) !== "Ongoing") return "";
+                if (match.status !== "Ongoing") return "";
                 if (isBasketballSport(match)) return `Quarter ${match.game_period || 1}`;
                 if (isVolleyballSport(match)) return `Set ${match.game_period || 1}`;
                 return "";
@@ -1377,7 +1365,7 @@
             }
 
             function renderStudentBasketballScoreSheet(match, options = {}) {
-                if (!hasPlayerScoreSheet(match) || normalizeMatchStatus(match.status) !== "Ongoing") {
+                if (!hasPlayerScoreSheet(match) || match.status !== "Ongoing") {
                     return "";
                 }
 
@@ -1608,9 +1596,7 @@
             }
 
             function getStatusMeta(status) {
-                const normalizedStatus = normalizeMatchStatus(status);
-
-                if (normalizedStatus === "Done") {
+                if (status === "Done") {
                     return {
                         label: "Completed",
                         badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -1619,7 +1605,7 @@
                         icon: "✅"
                     };
                 }
-                if (normalizedStatus === "Ongoing") {
+                if (status === "Ongoing") {
                     return {
                         label: "Ongoing",
                         badge: "bg-red-100 text-red-700 border-red-200 animate-pulse",
@@ -2522,7 +2508,6 @@
             function renderMatches() {
                 let filtered = [...studentMatchesData];
                 const activeDateFilter = getActiveScheduleDateFilter();
-                const todayDate = getLocalDateInputValue();
                 const showOngoingSingleColumn = activeScheduleFilter === "Ongoing";
                 studentMatchesGrid.className = showOngoingSingleColumn
                     ? "grid grid-cols-1 gap-6"
@@ -2530,12 +2515,10 @@
 
                 if (activeDateFilter) {
                     filtered = filtered.filter(m => getMatchDateValue(m) === activeDateFilter);
-                } else if (activeScheduleFilter === "Next") {
-                    filtered = filtered.filter(m => getMatchDateValue(m) >= todayDate);
                 }
 
                 if (activeScheduleFilter !== "All") {
-                    filtered = filtered.filter(m => normalizeMatchStatus(m.status) === activeScheduleFilter);
+                    filtered = filtered.filter(m => m.status === activeScheduleFilter);
                 }
 
                 if (activeSportCategoryFilter !== "All") {
@@ -2553,7 +2536,7 @@
 
                 const sorted = [...filtered].sort((a, b) => {
                     const hasActiveCountdown = match =>
-                        normalizeMatchStatus(match.status) === "Next"
+                        match.status === "Next"
                         && Boolean(match.timer_enabled)
                         && Boolean(match.timer_started_at);
                     const countdownDiff = Number(hasActiveCountdown(b)) - Number(hasActiveCountdown(a));
@@ -2565,9 +2548,8 @@
                     }
 
                     const order = { Ongoing: 0, Next: 1, Done: 2 };
-                    const diff = (order[normalizeMatchStatus(a.status)] ?? 99) - (order[normalizeMatchStatus(b.status)] ?? 99);
-                    const timeDiff = new Date(a.match_time || 0) - new Date(b.match_time || 0);
-                    return diff !== 0 ? diff : timeDiff;
+                    const diff = (order[a.status] ?? 99) - (order[b.status] ?? 99);
+                    return diff !== 0 ? diff : new Date(b.match_time || 0) - new Date(a.match_time || 0);
                 });
 
                 studentMatchesGrid.innerHTML = "";
@@ -2578,9 +2560,8 @@
                     const history = match.game_history;
                     const remaining = calculateRemainingSeconds(match);
                     const duration = clampTimerSeconds(match.timer_duration_seconds) || 600;
-                    const normalizedStatus = normalizeMatchStatus(match.status);
-                    const isUpcoming = normalizedStatus === "Next";
-                    const isDone = normalizedStatus === "Done";
+                    const isUpcoming = match.status === "Next";
+                    const isDone = match.status === "Done";
                     const showTimer = isUpcoming && (match.timer_enabled || duration > 0);
                     const matchStageLabel = getMatchStageLabel(match.match_stage);
                     const livePeriodLabel = getLivePeriodLabel(match);
@@ -2785,8 +2766,12 @@
             });
 
             if (scheduleDateFilter) {
-                scheduleDateFilter.value = "";
+                scheduleDateFilter.value = getLocalDateInputValue();
                 scheduleDateFilter.addEventListener("change", () => {
+                    if (!scheduleDateFilter.value) {
+                        scheduleDateFilter.value = getLocalDateInputValue();
+                    }
+
                     renderMatches();
                 });
             }
