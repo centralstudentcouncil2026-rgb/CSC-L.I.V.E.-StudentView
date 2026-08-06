@@ -2787,11 +2787,11 @@
                         if (remainingDiff !== 0) return remainingDiff;
                     }
 
-                    const categoryDiff = getGeneralSportName(getSportName(a)).localeCompare(getGeneralSportName(getSportName(b)));
-                    if (categoryDiff !== 0) return categoryDiff;
-
                     const timeDiff = new Date(a.match_time || 0) - new Date(b.match_time || 0);
                     if (timeDiff !== 0) return timeDiff;
+
+                    const categoryDiff = getGeneralSportName(getSportName(a)).localeCompare(getGeneralSportName(getSportName(b)));
+                    if (categoryDiff !== 0) return categoryDiff;
 
                     const sportDiff = getSportName(a).localeCompare(getSportName(b));
                     if (sportDiff !== 0) return sportDiff;
