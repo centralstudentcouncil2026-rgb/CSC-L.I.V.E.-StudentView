@@ -2689,7 +2689,7 @@
                         team_one:sports_leaderboard!scheduled_matches_team_one_fkey(team),
                         team_two:sports_leaderboard!scheduled_matches_team_two_fkey(team)
                     `)
-                    .order("match_time", { ascending: false });
+                    .order("match_time", { ascending: true });
 
                 if (error) {
                     console.error("Student match load error:", error.message || error);
@@ -2787,9 +2787,14 @@
                         if (remainingDiff !== 0) return remainingDiff;
                     }
 
+                    const sportDiff = getSportName(a).localeCompare(getSportName(b));
+                    if (sportDiff !== 0) return sportDiff;
+
                     const order = { Ongoing: 0, Next: 1, Done: 2 };
-                    const diff = (order[a.status] ?? 99) - (order[b.status] ?? 99);
-                    return diff !== 0 ? diff : new Date(b.match_time || 0) - new Date(a.match_time || 0);
+                    const statusDiff = (order[a.status] ?? 99) - (order[b.status] ?? 99);
+                    if (statusDiff !== 0) return statusDiff;
+
+                    return new Date(a.match_time || 0) - new Date(b.match_time || 0);
                 });
 
                 studentMatchesGrid.innerHTML = "";
