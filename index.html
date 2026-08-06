@@ -870,6 +870,15 @@
                 return getLocalDateInputValue(match?.match_time);
             }
 
+            function getMatchScheduleMinutes(match) {
+                const parsed = new Date(match?.match_time || "");
+                if (Number.isNaN(parsed.getTime())) {
+                    return Number.MAX_SAFE_INTEGER;
+                }
+
+                return parsed.getHours() * 60 + parsed.getMinutes();
+            }
+
             function formatDateFilterLabel(dateValue) {
                 const parsed = new Date(`${dateValue}T00:00:00`);
 
@@ -2775,7 +2784,7 @@
                 }
 
                 const sorted = [...filtered].sort((a, b) => {
-                    const timeDiff = new Date(a.match_time || 0) - new Date(b.match_time || 0);
+                    const timeDiff = getMatchScheduleMinutes(a) - getMatchScheduleMinutes(b);
                     if (timeDiff !== 0) return timeDiff;
 
                     const categoryDiff = getGeneralSportName(getSportName(a)).localeCompare(getGeneralSportName(getSportName(b)));
