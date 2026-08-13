@@ -164,18 +164,36 @@
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         }
 
+        .student-basketball-score-preview {
+            container-type: inline-size;
+        }
+
         .student-basketball-score-team {
             min-width: 0;
+        }
+
+        .student-basketball-score-preview .student-basketball-score-table {
+            font-size: 0.625rem;
+            line-height: 1.1;
         }
 
         .student-basketball-score-table th,
         .student-basketball-score-table td {
             padding-left: clamp(0.2rem, 1.4vw, 0.5rem);
             padding-right: clamp(0.2rem, 1.4vw, 0.5rem);
+            white-space: nowrap;
         }
 
         .student-basketball-score-player {
             max-width: 1px;
+        }
+
+        @container (max-width: 21rem) {
+            .student-basketball-score-table th,
+            .student-basketball-score-table td {
+                padding-left: 0.18rem;
+                padding-right: 0.18rem;
+            }
         }
 
         @media (max-width: 420px) {
@@ -553,7 +571,7 @@
             </div>
 
             <!-- Matches Grid -->
-            <div id="studentMatchesGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div id="studentMatchesGrid" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
                 <div class="col-span-full py-20 text-center bg-white rounded-2xl border border-slate-200">
                     <div class="flex flex-col items-center space-y-3">
                         <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -1213,7 +1231,7 @@
                 if (!match.timer_enabled || !match.timer_started_at) return duration;
                 const startedAt = new Date(match.timer_started_at).getTime();
                 if (Number.isNaN(startedAt)) return duration;
-                const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                const elapsed = Math.max(0, Math.ceil((Date.now() - startedAt) / 1000));
                 return Math.max(duration - elapsed, 0);
             }
 
@@ -1817,7 +1835,7 @@
                     if (isEnabled && startedAt) {
                         const startedAtMs = new Date(startedAt).getTime();
                         if (!Number.isNaN(startedAtMs)) {
-                            const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+                            const elapsed = Math.max(0, Math.ceil((Date.now() - startedAtMs) / 1000));
                             remaining = Math.max(duration - elapsed, 0);
                         }
                     }
@@ -2760,7 +2778,7 @@
                 const showOngoingSingleColumn = activeScheduleFilter === "Ongoing";
                 studentMatchesGrid.className = showOngoingSingleColumn
                     ? "grid grid-cols-1 gap-6"
-                    : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6";
+                    : "grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6";
 
                 if (activeDateFilter) {
                     filtered = filtered.filter(m => getMatchDateValue(m) === activeDateFilter);
