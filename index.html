@@ -756,7 +756,7 @@
             const PARTICIPANTS_TABLE = "participants";
             const ATTENDANCE_TABLE = "attendance";
             const ATTENDANCE_SETTINGS_TABLE = "attendance_settings";
-            const ATTENDANCE_POINTS_VIEW = "attendance_point_history";
+            const ATTENDANCE_POINTS_TABLE = "attendance_point_logs";
             const MATCHES_TABLE = "scheduled_matches";
             const GAME_HISTORY_TABLE = "game_history";
             const TEAM_POINT_ADJUSTMENTS_TABLE = "team_point_adjustments";
@@ -1938,7 +1938,7 @@
                             .select("*"),
 
                         supabase
-                            .from(ATTENDANCE_POINTS_VIEW)
+                            .from(ATTENDANCE_POINTS_TABLE)
                             .select("*"),
 
                         supabase
@@ -2316,22 +2316,6 @@
                 });
             }
 
-            function isPresentAttendanceStatus(status) {
-                return normalizeText(status || "Present") === "present";
-            }
-
-            function getAttendanceBonusDate(row) {
-                if (row.attendance_date) {
-                    return String(row.attendance_date).slice(0, 10);
-                }
-
-                if (row.checked_at) {
-                    return String(row.checked_at).slice(0, 10);
-                }
-
-                return "";
-            }
-
             function buildAttendancePointRows(attendanceRows) {
                 return (attendanceRows || [])
                     .map(row => ({
@@ -2340,7 +2324,7 @@
                         date: row.attendance_date || row.date || "",
                         points: Number(row.total_points || row.points || 0)
                     }))
-                    .filter(row => row.team && row.date && Number.isFinite(row.points));
+                    .filter(row => row.team && row.date && Number.isFinite(row.points) && row.points > 0);
             }
 
             function buildTeamAdjustmentRows(adjustmentRows) {
@@ -3095,6 +3079,9 @@
                     scheduleLiveLeaderboardReload(0, { force: true });
                 })
                 .on("postgres_changes", { event: "*", schema: "public", table: ATTENDANCE_SETTINGS_TABLE }, () => {
+                    scheduleLiveLeaderboardReload(0, { force: true });
+                })
+                .on("postgres_changes", { event: "*", schema: "public", table: ATTENDANCE_POINTS_TABLE }, () => {
                     scheduleLiveLeaderboardReload(0, { force: true });
                 })
                 .on("postgres_changes", { event: "*", schema: "public", table: MATCHES_TABLE }, () => {
