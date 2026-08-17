@@ -2450,7 +2450,7 @@
                         date: row.attendance_date || row.date || "",
                         points: Number(row.total_points || row.points || 0)
                     }))
-                    .filter(row => row.team && row.date && Number.isFinite(row.points) && row.points > 0);
+                    .filter(row => row.team && row.date && Number.isFinite(row.points));
             }
 
             function buildTeamAdjustmentRows(adjustmentRows) {
